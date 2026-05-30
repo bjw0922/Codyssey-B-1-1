@@ -109,44 +109,61 @@ SSH 변경 포트: 20022
 
 ```bash
 hostname
+- 현재 컨테이너의 호스트명을 확인한다.
+- Docker 컨테이너 ID 일부가 hostname으로 표시되므로 컨테이너 내부 환경임을 확인할 수 있다.
+
 cat /etc/os-release
+- 현재 OS 배포판 정보를 확인한다.
+- Ubuntu 22.04 환경인지 확인하는 데 사용한다.
+
 uname -a
-whoami
-pwd
+- 커널 정보와 시스템 아키텍처를 확인한다.
+- 컨테이너가 사용하는 Linux 커널 정보를 확인할 수 있다.
+
 ps -p 1 -o pid,comm,args
-```
-
-### 결과 증거
-
-```text
-
+- PID 1 프로세스를 확인한다.
+- 컨테이너 내부에서 어떤 프로세스가 최상위 프로세스로 실행 중인지 확인할 수 있다.
 ```
 
 ### 3-3. 컨테이너 내부에서 설치한 주요 패키지
 
 ```text
-sudo             : 일반 계정으로 제한된 관리자 명령 실행
-openssh-server   : SSH 서비스 제공
-ufw              : 방화벽 설정 도구
-cron             : 주기 실행 자동화
-acl              : ACL 권한 설정 및 확인
-procps           : ps, pgrep, free 등 프로세스/메모리 확인 도구
-net-tools        : 네트워크 확인 보조 도구
-iproute2         : ss 명령어 제공
-gzip             : 로그 압축
-python3          : 제공 앱 또는 실습용 앱 실행
+sudo
+- 일반 계정이 필요한 경우에만 관리자 권한 명령을 실행하기 위해 사용한다.
+
+openssh-server
+- SSH 서비스를 제공한다.
+- SSH 포트를 20022로 변경하고 root 원격 접속 차단 설정을 확인하기 위해 필요하다.
+
+ufw
+- 방화벽 설정 도구이다.
+- 20022/tcp, 15034/tcp만 허용하는 정책을 구성하기 위해 필요하다.
+
+cron
+- monitor.sh를 매분 자동 실행하기 위해 필요하다.
+
+acl
+- setfacl, getfacl 명령어를 사용하기 위해 필요하다.
+- 디렉토리별 세부 권한 확인에 사용한다.
+
+procps
+- ps, pgrep, free 명령어를 제공한다.
+- 프로세스 확인, 메모리 사용률 확인에 필요하다.
+
+iproute2
+- ss 명령어를 제공한다.
+- 20022, 15034 포트 LISTEN 상태 확인에 필요하다.
+
+python3
+- 제공 앱 또는 실습용 agent_app.py를 실행하기 위해 필요하다.
+
+gzip
+- 7일 이상 지난 로그를 압축하는 log_retention.sh에서 사용한다.
 ```
 
-### 설치 확인 명령어
-
+최종 설치 명령어는 이렇게 되어있다.
 ```bash
-dpkg -l | grep -E 'sudo|openssh-server|ufw|cron|acl|procps|net-tools|iproute2|gzip|python3'
-```
-
-### 결과 증거
-
-```text
-
+apt install -y sudo openssh-server ufw cron acl procps iproute2 python3 gzip
 ```
 
 ---
@@ -201,7 +218,64 @@ getfacl /var/log/agent-app
 ### 결과 증거
 
 ```text
+root@ba66f819ef4e:/# id agent-admin
+uid=1000(agent-admin) gid=1002(agent-admin) groups=1002(agent-admin),27(sudo),1000(agent-common),1001(agent-core)
+root@ba66f819ef4e:/# id agent-dev
+uid=1001(agent-dev) gid=1003(agent-dev) groups=1003(agent-dev),1000(agent-common),1001(agent-core)
+root@ba66f819ef4e:/# id agent-test
+uid=1002(agent-test) gid=1004(agent-test) groups=1004(agent-test),1000(agent-common)
 
+
+root@ba66f819ef4e:/# getent group agent-common
+agent-common:x:1000:agent-admin,agent-dev,agent-test
+root@ba66f819ef4e:/# getent group agent-core
+agent-core:x:1001:agent-admin,agent-dev
+
+
+root@ba66f819ef4e:/# ls -ld /home/agent-admin/agent-app
+drwxr-x--- 1 agent-admin agent-core 70 May 30 04:18 /home/agent-admin/agent-app
+root@ba66f819ef4e:/# ls -ld /home/agent-admin/agent-app/upload_files
+drwxrwx---+ 1 agent-admin agent-common 0 May 30 04:11 /home/agent-admin/agent-app/upload_files
+root@ba66f819ef4e:/# ls -ld /home/agent-admin/agent-app/api_keys
+drwxrwx---+ 1 agent-admin agent-core 24 May 30 04:15 /home/agent-admin/agent-app/api_keys
+root@ba66f819ef4e:/# ls -ld /var/log/agent-app
+drwxrwx---+ 1 agent-admin agent-core 22 May 30 04:22 /var/log/agent-app
+root@ba66f819ef4e:/# ls -l /home/agent-admin/agent-app/bin/monitor.sh
+-rwxr-x--- 1 agent-dev agent-core 3658 May 30 04:19 /home/agent-admin/agent-app/bin/monitor.sh
+
+
+root@ba66f819ef4e:/# getfacl /home/agent-admin/agent-app/upload_files
+getfacl: Removing leading '/' from absolute path names
+# file: home/agent-admin/agent-app/upload_files
+# owner: agent-admin
+# group: agent-common
+user::rwx
+group::rwx
+group:agent-common:rwx
+mask::rwx
+other::---
+
+root@ba66f819ef4e:/# getfacl /home/agent-admin/agent-app/api_keys
+getfacl: Removing leading '/' from absolute path names
+# file: home/agent-admin/agent-app/api_keys
+# owner: agent-admin
+# group: agent-core
+user::rwx
+group::rwx
+group:agent-core:rwx
+mask::rwx
+other::---
+
+root@ba66f819ef4e:/# getfacl /var/log/agent-app
+getfacl: Removing leading '/' from absolute path names
+# file: var/log/agent-app
+# owner: agent-admin
+# group: agent-core
+user::rwx
+group::rwx
+group:agent-core:rwx
+mask::rwx
+other::---
 ```
 
 ---
@@ -241,7 +315,13 @@ ss -tulnp | grep ':20022'
 ### 결과 증거
 
 ```text
+root@ba66f819ef4e:/# grep -E '^(Port|PermitRootLogin)' /etc/ssh/sshd_config
+Port 20022
+PermitRootLogin no
 
+root@ba66f819ef4e:/# ss -tulnp | grep ':20022'
+tcp   LISTEN 0      128          0.0.0.0:20022      0.0.0.0:*    users:(("sshd",pid=4553,fd=3))   
+tcp   LISTEN 0      128             [::]:20022         [::]:*    users:(("sshd",pid=4553,fd=4))   
 ```
 
 ### 설명
@@ -276,7 +356,18 @@ ufw status verbose
 ### 결과 증거
 
 ```text
+root@ba66f819ef4e:/# ufw status verbose
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), deny (routed)
+New profiles: skip
 
+To                         Action      From
+--                         ------      ----
+20022/tcp                  ALLOW IN    Anywhere                  
+15034/tcp                  ALLOW IN    Anywhere                  
+20022/tcp (v6)             ALLOW IN    Anywhere (v6)             
+15034/tcp (v6)             ALLOW IN    Anywhere (v6)             
 ```
 
 ### 설명
@@ -324,7 +415,19 @@ sudo -iu agent-admin /home/agent-admin/agent-app/bin/run_agent.sh
 ### 결과 증거: Boot Sequence
 
 ```text
-
+[1/5] Checking User Account                  [OK]
+... Running as service user 'agent-admin' (uid=1000)
+[2/5] Verifying Environment Variables        [OK]
+... All required Envs correct
+[3/5] Checking Required Files                [OK]
+... Verified key file with correct key string.
+[4/5] Checking Port Availability             [OK]
+... Port 15034 is available.
+[5/5] Verifying Log Permission               [OK]
+... Log directory is writable: /var/log/agent-app
+------------------------------------------------------------
+All Boot Checks Passed!
+Agent READY
 ```
 
 ### 결과 증거: 포트 확인
@@ -334,12 +437,12 @@ ss -tulnp | grep ':15034'
 ```
 
 ```text
-
+root@ba66f819ef4e:/# ss -tulnp | grep ':15034'
+tcp   LISTEN 0      5            0.0.0.0:15034      0.0.0.0:*    users:(("python3",pid=4770,fd=3))
 ```
 
 ### 설명
-
-환경 변수를 사용하면 앱 실행에 필요한 경로와 포트를 코드에 직접 고정하지 않아도 된다. 운영 환경에서는 같은 앱이라도 서버마다 경로, 포트, 로그 디렉토리가 다를 수 있으므로 환경 변수로 실행 조건을 분리하는 것이 좋다.
+15034 포트 확인 결과, python3 프로세스가 0.0.0.0:15034 주소에서 LISTEN 상태로 실행 중임을 확인하였다. 따라서 애플리케이션이 요구 포트인 15034에서 정상적으로 대기 중임을 확인할 수 있다. *환경 변수를 사용하면 앱 실행에 필요한 경로와 포트를 코드에 직접 고정하지 않아도 된다. 운영 환경에서는 같은 앱이라도 서버마다 경로, 포트, 로그 디렉토리가 다를 수 있으므로 환경 변수로 실행 조건을 분리하는 것이 좋다.*
 
 ---
 
@@ -382,7 +485,24 @@ sudo -u agent-admin /home/agent-admin/agent-app/bin/monitor.sh
 ### 결과 증거
 
 ```text
+root@ba66f819ef4e:/# sudo -u agent-admin /home/agent-admin/agent-app/bin/monitor.sh
+====== SYSTEM MONITOR RESULT ======
 
+[HEALTH CHECK]
+Checking process 'agent_app.py'... [OK] (PID: 4770)
+Checking port 15034... [OK]
+
+[FIREWALL CHECK]
+ERROR: You need to be root to run this script
+[WARNING] UFW/firewalld firewall is not active or cannot be checked
+
+[RESOURCE MONITORING]
+CPU Usage : 0.0%
+MEM Usage : 2.0%
+DISK Used : 1%
+
+
+[INFO] Log appended: /var/log/agent-app/monitor.log
 ```
 
 ### 설명
@@ -414,7 +534,13 @@ tail -n 5 /var/log/agent-app/monitor.log
 ### 결과 증거
 
 ```text
-
+[INFO] Log appended: /var/log/agent-app/monitor.log
+root@ba66f819ef4e:/# tail -n 5 /var/log/agent-app/monitor.log
+[2026-05-30 05:51:02] PID:4770 CPU:0.0% MEM:1.8% DISK_USED:1%
+[2026-05-30 05:52:01] PID:4770 CPU:0.0% MEM:1.8% DISK_USED:1%
+[2026-05-30 05:53:02] PID:4770 CPU:0.0% MEM:1.9% DISK_USED:1%
+[2026-05-30 05:53:39] PID:4770 CPU:0.0% MEM:2.0% DISK_USED:1%
+[2026-05-30 05:54:01] PID:4770 CPU:0.0% MEM:1.9% DISK_USED:1%
 ```
 
 ---
@@ -441,7 +567,21 @@ tail -n 5 /var/log/agent-app/monitor.log
 ### 결과 증거
 
 ```text
-
+root@ba66f819ef4e:/# service cron start
+ * Starting periodic command scheduler cron                                                 [ OK ] 
+root@ba66f819ef4e:/# crontab -u agent-admin -l
+* * * * * /home/agent-admin/agent-app/bin/monitor.sh >/dev/null 2>&1
+root@ba66f819ef4e:/# wc -l /var/log/agent-app/monitor.log
+95 /var/log/agent-app/monitor.log
+root@ba66f819ef4e:/# sleep 70
+root@ba66f819ef4e:/# wc -l /var/log/agent-app/monitor.log
+122 /var/log/agent-app/monitor.log
+root@ba66f819ef4e:/# tail -n 5 /var/log/agent-app/monitor.log
+[2026-05-30 06:17:01] PID:4770 CPU:0.0% MEM:1.9% DISK_USED:1%
+[2026-05-30 06:18:02] PID:4770 CPU:0.0% MEM:1.8% DISK_USED:1%
+[2026-05-30 06:19:01] PID:4770 CPU:0.0% MEM:1.9% DISK_USED:1%
+[2026-05-30 06:20:01] PID:4770 CPU:0.0% MEM:1.8% DISK_USED:1%
+[2026-05-30 06:21:02] PID:4770 CPU:0.0% MEM:2.2% DISK_USED:1%
 ```
 
 ### 설명
@@ -466,7 +606,11 @@ ls -lh /var/log/agent-app/
 ### 결과 증거
 
 ```text
-
+root@ba66f819ef4e:/# ls -lh /var/log/agent-app/
+total 28K
+-rw-rw---- 1 agent-admin agent-core  62 May 30 07:09 monitor.log
+-rw-rw---- 1 agent-admin agent-core 11M May 30 07:09 monitor.log.1
+-rw-r----- 1 root        root       11K May 30 07:09 monitor.log.backup****
 ```
 
 ### 설명
@@ -505,9 +649,24 @@ sudo -u agent-admin /home/agent-admin/agent-app/bin/report.sh "YYYY-MM-DD HH:MM:
 ```
 
 ### 결과 증거
-
+시간 구간 지정 실행 결과
 ```text
-
+root@ba66f819ef4e:/# sudo -u agent-admin /home/agent-admin/agent-app/bin/report.sh "2026-05-30 04:00:00" "2026-05-30 04:30:00"
+====== STATISTICS REPORT ======
+[CPU]
+Average : 0.1%
+Maximum : 0.5% at 2026-05-30 04:24:01
+Minimum : 0.0% at 2026-05-30 04:22:01
+[Memory]
+Average : 1.9%
+Maximum : 2.1% at 2026-05-30 04:23:02
+Minimum : 1.8% at 2026-05-30 04:22:12
+[Disk]
+Average : 1.0%
+Maximum : 1.0% at 2026-05-30 04:22:01
+Minimum : 1.0% at 2026-05-30 04:22:01
+[Samples]
+Data Points: 9 samples
 ```
 
 ### 설명
@@ -538,14 +697,19 @@ sudo /home/agent-admin/agent-app/bin/log_retention.sh
 ```
 
 ### 결과 증거
-
+현재 7일 이상 지난 로그 파일이 없기 때문에 일부러 추가한 후 실행 명령어를 입력했다. 
 ```text
-
+root@ba66f819ef4e:/# sudo /home/agent-admin/agent-app/bin/log_retention.sh
+[INFO] Archived: /var/log/agent-app/old-test.log -> /var/log/monitor/agent-app/archive/old-test.log.20260530071254.gz
+[INFO] No archives older than 30 days.
+root@ba66f819ef4e:/# ls -lh /var/log/monitor/agent-app/archive/
+total 4.0K
+-rw-r--r-- 1 root root 46 May 30 07:12 old-test.log.20260530071254.gz
 ```
 
 ---
 
-## 8. 추가 개념 정리
+## 8. 몰랐던 개념 정리
 
 ---
 
@@ -832,12 +996,6 @@ grep -E '^(Port|PermitRootLogin)' /etc/ssh/sshd_config
 ss -tulnp | grep ':20022'
 ```
 
-### 결과 증거
-
-```text
-
-```
-
 ---
 
 ## 9-2. 방화벽 테스트
@@ -845,12 +1003,6 @@ ss -tulnp | grep ':20022'
 ```bash
 ufw status verbose
 ufw status numbered
-```
-
-### 결과 증거
-
-```text
-
 ```
 
 ---
@@ -863,12 +1015,6 @@ service cron status || true
 crontab -u agent-admin -l
 ```
 
-### 결과 증거
-
-```text
-
-```
-
 ---
 
 ## 9-4. 앱 실행 테스트
@@ -877,12 +1023,6 @@ crontab -u agent-admin -l
 
 ```bash
 sudo -iu agent-admin /home/agent-admin/agent-app/bin/run_agent.sh
-```
-
-### 결과 증거
-
-```text
-
 ```
 
 ---
@@ -895,12 +1035,6 @@ sudo -iu agent-admin /home/agent-admin/agent-app/bin/run_agent.sh
 ss -tulnp | grep ':15034'
 ```
 
-### 결과 증거
-
-```text
-
-```
-
 ---
 
 ## 9-6. monitor.sh 수동 실행 테스트
@@ -911,24 +1045,10 @@ ss -tulnp | grep ':15034'
 sudo -u agent-admin /home/agent-admin/agent-app/bin/monitor.sh
 ```
 
-### 결과 증거
-
-```text
-
-```
-
----
-
 ## 9-7. 로그 누적 확인
 
 ```bash
 tail -n 5 /var/log/agent-app/monitor.log
-```
-
-### 결과 증거
-
-```text
-
 ```
 
 ---
@@ -940,12 +1060,6 @@ wc -l /var/log/agent-app/monitor.log
 sleep 70
 wc -l /var/log/agent-app/monitor.log
 tail -n 5 /var/log/agent-app/monitor.log
-```
-
-### 결과 증거
-
-```text
-
 ```
 
 ---
@@ -962,24 +1076,12 @@ sudo -u agent-admin /home/agent-admin/agent-app/bin/report.sh
 sudo -u agent-admin /home/agent-admin/agent-app/bin/report.sh "YYYY-MM-DD HH:MM:SS" "YYYY-MM-DD HH:MM:SS"
 ```
 
-### 결과 증거
-
-```text
-
-```
-
 ---
 
 ## 9-10. log_retention.sh 테스트
 
 ```bash
 sudo /home/agent-admin/agent-app/bin/log_retention.sh
-```
-
-### 결과 증거
-
-```text
-
 ```
 
 ---
@@ -1055,19 +1157,20 @@ sudo /home/agent-admin/agent-app/bin/log_retention.sh || true
 
 ## 11. 문제 해결 및 트러블슈팅
 
-### 문제 1. `/work/agent-monitor-practice`가 없다고 나오는 경우
+### 문제 1. 앱 실행을 했는데 실패한 경우
 
 ```text
-bash: cd: /work/agent-monitor-practice: No such file or directory
+... Verified key file with correct key string.
+[4/5] Checking Port Availability             [FAIL]
 ```
 
 ### 원인
 
-Docker 실행 시 Mac 폴더를 `/work`에 마운트하지 않았거나, ZIP 파일 압축 해제 방식으로 진행하지 않았기 때문이다.
+15034 포트가 이미 다른 프로세스에 의해 사용 중이었기 때문이다. ss -tulnp | grep ':15034' 명령어로 확인한 결과 python3 프로세스가 15034 포트를 LISTEN 상태로 사용 중이었다.
 
 ### 해결
 
-이 README는 ZIP 압축 해제 방식이 아니라 컨테이너 내부에서 직접 파일을 작성하는 방식으로 정리했다. 따라서 `/work/agent-monitor-practice`로 이동하지 않고, 컨테이너 내부의 다음 경로를 기준으로 작업한다.
+기존 앱 프로세스를 Ctrl+C 또는 kill 명령어로 종료한 뒤 앱을 다시 실행하여 문제를 해결할 수 있다.
 
 ```text
 /home/agent-admin/agent-app
