@@ -505,7 +505,26 @@ DISK Used : 1%
 
 프로세스와 포트 확인은 앱이 실제로 실행 중인지 판단하는 핵심 조건이다. 프로세스가 없거나 포트가 열려 있지 않으면 서비스 장애이므로 `exit 1`로 종료한다. 방화벽 비활성화나 리소스 임계값 초과는 즉시 앱 종료 상태를 의미하지 않으므로 `[WARNING]`만 출력한다.
 
+## 5-4-1. monitor.sh 비정상 상태
+
+### 결과 증거
+
+터미널1에서 실행 중이던 앱을 종료 후 터미널2에서 monitor.sh를 실행시킨 결과다. 
+
+```text
+root@ba66f819ef4e:/# sudo -u agent-admin /home/agent-admin/agent-app/bin/monitor.sh
+====== SYSTEM MONITOR RESULT ======
+
+[HEALTH CHECK]
+Checking process 'agent_app.py'... [ERROR]
+[ERROR] Application process is not running
+root@ba66f819ef4e:/# echo "EXIT_CODE=$?"
+EXIT_CODE=1
+```
+
 ---
+
+
 
 ## 5-5. monitor.log 누적 기록 확인
 
